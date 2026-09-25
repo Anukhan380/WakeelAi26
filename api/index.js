@@ -1,6 +1,6 @@
 const https = require('https');
 
-const GROQ_KEY = process.env.GROQ_API_KEY;
+const GEMINI_KEY = process.env.GEMINI_API_KEY;
 const SUPA_HOST = (process.env.SUPABASE_URL || '').replace('https://', '');
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY;
 const ADMIN_PASS = (process.env.ADMIN_PASSWORD || 'wakeel2024admin').trim();
@@ -42,20 +42,23 @@ function supa(method, path, data) {
   });
 }
 
-function groq(system, messages) {
+// Uses Gemini's OpenAI-compatible endpoint, so the request/response
+// shape stays identical to what the old groq() function returned.
+function callAI(system, messages) {
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify({
-      model: 'llama-3.1-8b-instant',
-      messages: [{ role: 'system', content: system }].concat(messages),
-      max_tokens: 1500, temperature: 0.3
+      model: 'gemini-2.5-flash',
+      messages: [{ role: 'system', content: system }].concat(messages || []),
+      max_tokens: 1500,
+      temperature: 0.3
     });
     const req = https.request({
-      hostname: 'api.groq.com',
-      path: '/openai/v1/chat/completions',
+      hostname: 'generativelanguage.googleapis.com',
+      path: '/v1beta/openai/chat/completions',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + GROQ_KEY,
+        'Authorization': 'Bearer ' + GEMINI_KEY,
         'Content-Length': Buffer.byteLength(payload)
       }
     }, res => {
@@ -91,7 +94,7 @@ module.exports = async (req, res) => {
     if (route === 'test') {
       res.json({
         status: '✅ WakeelAI working!',
-        groq: GROQ_KEY ? '✅ Set' : '❌ Missing',
+        gemini: GEMINI_KEY ? '✅ Set' : '❌ Missing',
         supabase: SUPA_HOST ? '✅ Set' : '❌ Missing',
         admin: ADMIN_PASS ? '✅ Set' : '❌ Missing'
       });
@@ -100,7 +103,7 @@ module.exports = async (req, res) => {
 
     // CHAT
     if (route === 'chat') {
-      const text = await groq(b.system, b.messages);
+      const text = await callAI(b.system, b.messages);
       res.json({ content: [{ type: 'text', text }] });
       return;
     }
@@ -130,7 +133,7 @@ module.exports = async (req, res) => {
       const rows = await supa('GET', `/rest/v1/lawyers?access_code=eq.${encodeURIComponent(code)}&active=eq.true&plan=eq.premium&select=id`, null);
       if (!rows || rows.length === 0) { res.json({ error: 'Premium access required.' }); return; }
       const sys = 'You are an expert Pakistani legal research assistant. Provide: Case Analysis, Relevant Laws, Legal Arguments, Counter-Arguments, Practical Advice. Be precise.';
-      const text = await groq(sys, [{ role: 'user', content: b.caseDetails }]);
+      const text = await callAI(sys, [{ role: 'user', content: b.caseDetails }]);
       res.json({ content: [{ type: 'text', text }] });
       return;
     }
@@ -203,7 +206,7 @@ module.exports = async (req, res) => {
       if (!rows || rows.length === 0) { res.json({ error: 'Document not found' }); return; }
       const doc = rows[0];
       const sys = 'You are an expert Pakistani legal document drafter. Write professional, complete, legally sound documents ready for use in Pakistan.';
-      const text = await groq(sys, [{ role: 'user', content: `Draft a ${doc.type} for:\n\n${doc.description}\n\nClient: ${doc.name}\n\nMake it complete and professional.` }]);
+      const text = await callAI(sys, [{ role: 'user', content: `Draft a ${doc.type} for:\n\n${doc.description}\n\nClient: ${doc.name}\n\nMake it complete and professional.` }]);
       await supa('PATCH', `/rest/v1/documents?id=eq.${encodeURIComponent(b.id)}`, {
         document: text, status: 'completed', completed_at: new Date().toISOString()
       });
