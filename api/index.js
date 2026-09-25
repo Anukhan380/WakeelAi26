@@ -49,8 +49,15 @@ function callAI(system, messages) {
     const payload = JSON.stringify({
       model: 'gemini-2.5-flash',
       messages: [{ role: 'system', content: system }].concat(messages || []),
-      max_tokens: 1500,
-      temperature: 0.3
+      max_tokens: 2000,
+      temperature: 0.3,
+      // Disable Gemini's internal "thinking" tokens so the whole
+      // token budget goes to the actual visible answer, not reasoning.
+      extra_body: {
+        google: {
+          thinking_config: { thinking_budget: 0 }
+        }
+      }
     });
     const req = https.request({
       hostname: 'generativelanguage.googleapis.com',
